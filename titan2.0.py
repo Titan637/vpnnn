@@ -155,7 +155,7 @@ def bgmi_command(message):
         )
 
         # Log the attack started message
-        logging.info(f"Attack started by {user_name}: ./lg {target_ip} {target_port} {default_duration} 900")
+        logging.info(f"Attack started by {user_name}: ./megoxer {target_ip} {target_port} {default_duration}")
 
         # Run the attack command with the default duration and pass the user-provided duration for the finish message
         asyncio.run(run_attack_command_async(target_ip, int(target_port), default_duration, user_duration, user_name))
