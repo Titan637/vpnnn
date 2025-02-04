@@ -22,6 +22,9 @@ CHANNEL_ID = '-1002298552334'  # Replace with your specific channel or group ID 
 FEEDBACK_CHANNEL_ID = '-1002124760113'  # Replace with your specific channel ID for feedback
 message_queue = []
 
+# Official channel details
+OFFICIAL_CHANNEL = "@titanddos24op"  # Replace with your channel username or ID
+CHANNEL_LINK = "https://t.me/titanddos24op"  # Replace with your channel link
 
 # Initialize the bot
 bot = telebot.TeleBot(TOKEN)
@@ -49,6 +52,16 @@ DAILY_ATTACK_LIMIT = 5000
 EXEMPTED_USERS = [7163028849, 7184121244]
 # Configuration
 MAX_ATTACK_DURATION = 60  # Maximum attack duration in seconds (e.g., 300 seconds = 5 minutes)
+
+
+def is_member(user_id):
+    """Check if the user is a member of the official channel."""
+    try:
+        chat_member = bot.get_chat_member(OFFICIAL_CHANNEL, user_id)
+        return chat_member.status in ["member", "administrator", "creator"]
+    except Exception as e:
+        logging.error(f"Failed to check membership: {e}")
+        return False
 
 def sanitize_filename(filename):
     """Sanitize filenames to prevent path traversal."""
@@ -149,6 +162,23 @@ def bgmi_command(message):
     reset_daily_counts()
     user_id = message.from_user.id
 
+    # Check if user has joined the official channel
+    if not is_member(user_id):
+        # Create a "Join Channel" button
+        markup = InlineKeyboardMarkup()
+        markup.add(InlineKeyboardButton("🌟 Join Official Channel 🌟", url=CHANNEL_LINK))
+        markup.add(InlineKeyboardButton("✅ I've Joined", callback_data="check_membership"))
+
+        bot.reply_to(
+            message,
+            "🚨 *Access Denied* 🚨\n\n"
+            "To use this bot, you must join our official channel.\n"
+            "Click the button below to join and then press *'I've Joined'* to verify.",
+            reply_markup=markup,
+            parse_mode="Markdown"
+        )
+        return
+
     # Channel restriction check
     if str(message.chat.id) != CHANNEL_ID:
         bot.send_message(message.chat.id, "⚠️ Unauthorized usage detected!")
@@ -235,6 +265,15 @@ def bgmi_command(message):
         logging.error(f"Attack error: {str(e)}")
     finally:
         attack_in_progress = False
+
+@bot.callback_query_handler(func=lambda call: call.data == "check_membership")
+def check_membership(call):
+    """Handle the 'I've Joined' button click."""
+    user_id = call.from_user.id
+    if is_member(user_id):
+        bot.answer_callback_query(call.id, "✅ Thank you for joining! You can now use /bgmi.")
+    else:
+        bot.answer_callback_query(call.id, "❌ You haven't joined the channel yet. Please join and try again.")
 
 async def execute_attack(ip, port, duration, username):
     """Run attack command asynchronously and wait for the duration to complete."""
