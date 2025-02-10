@@ -414,3 +414,7 @@ def message_worker():
 
 # Start worker thread
 threading.Thread(target=message_worker, daemon=True).start()
+
+if __name__ == "__main__":
+    logging.info("Bot started")
+    bot.polling(none_stop=True)
