@@ -51,10 +51,10 @@ reset_time = datetime.now().astimezone(timezone(timedelta(hours=5, minutes=30)))
 # Configuration
 COOLDOWN_DURATION = 900  # 1 minute cooldown
 BAN_DURATION = timedelta(hours=1)  # 1 hour ban for invalid feedback
-DAILY_ATTACK_LIMIT = 5000
+DAILY_ATTACK_LIMIT = 500
 EXEMPTED_USERS = [7163028849, 7184121244]
 # Configuration
-MAX_ATTACK_DURATION = 120  # Maximum attack duration in seconds (e.g., 300 seconds = 5 minutes)
+MAX_ATTACK_DURATION = 60  # Maximum attack duration in seconds (e.g., 300 seconds = 5 minutes)
 
 
 def is_member(user_id):
